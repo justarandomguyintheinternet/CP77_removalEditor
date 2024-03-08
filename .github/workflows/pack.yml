@@ -1,0 +1,27 @@
+name: pack
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup folders
+        run: |
+          cd ${{ github.workspace }}
+          sudo mkdir -p /removalEditorPacked/bin/x64/plugins/cyber_engine_tweaks/mods/removalEditor/
+      - name: Copy files
+        run: |
+          sudo cp -r modules /removalEditorPacked/bin/x64/plugins/cyber_engine_tweaks/mods/removalEditor/
+          sudo cp -r data /removalEditorPacked/bin/x64/plugins/cyber_engine_tweaks/mods/removalEditor/
+          sudo cp -r init.lua /removalEditorPacked/bin/x64/plugins/cyber_engine_tweaks/mods/removalEditor/
+      - name: Upload zip
+        uses: actions/upload-artifact@v2
+        with:
+            name: removalEditorLatest
+            path: /removalEditorPacked/

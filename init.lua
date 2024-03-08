@@ -207,7 +207,7 @@ function removal:drawDirectTarget()
 
         local sectorName = target.sectorPath:match("(.+)%..+$"):match("[^\\]*.$")
         local note = self.notes[tostring(sectorName .. "_" .. target.instanceIndex)] or ""
-        local text, changed = ImGui.InputTextWithHint("##note", "Note...", note, 100)
+        local text, changed = ImGui.InputTextWithHint("##noteAdd", "Note...", note, 100)
         if changed and #text > 0 then
             self.notes[tostring(sectorName .. "_" .. target.instanceIndex)] = text
             config.saveFile("data/notes.json", self.notes)
@@ -219,7 +219,7 @@ function removal:drawDirectTarget()
 
     ImGui.Spacing()
 
-    if ImGui.Button("Add Node", styles.width, styles.buttonY) then
+    if ImGui.Button("Add Staged Node", styles.width, styles.buttonY) then
         if target then
             self:addRemoval(target)
         end
@@ -290,8 +290,8 @@ function removal:drawEditUI()
     end
     spacedSeparator()
 
-    ImGui.PushItemWidth(70)
-    self.searchText = ImGui.InputTextWithHint("##note", "Search for node (Type, Sector, Index, Note)", self.searchText, 100)
+    ImGui.PushItemWidth(400)
+    self.searchText = ImGui.InputTextWithHint("##searchForNode", "Search for node (Type, Sector, Index, Note)", self.searchText, 100)
     if self.searchText ~= "" then
         ImGui.SameLine()
         if ImGui.Button("X") then
@@ -376,7 +376,7 @@ function removal:drawRemoval(sector, entry)
 
     local sectorName = sector.path:match("(.+)%..+$"):match("[^\\]*.$")
     local note = self.notes[tostring(sectorName .. "_" .. entry.index)] or ""
-    local text, changed = ImGui.InputTextWithHint("##note", "Note...", note, 100)
+    local text, changed = ImGui.InputTextWithHint("##noteRemoval", "Note...", note, 100)
     if changed and #text > 0 then
         self.notes[tostring(sectorName .. "_" .. entry.index)] = text
         config.saveFile("data/notes.json", self.notes)
