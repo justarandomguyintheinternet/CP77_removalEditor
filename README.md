@@ -21,7 +21,7 @@ Here you can create a new preset by entering a name in the `Name...` field and h
 - You can expand each node's header to either add a note, or remove the node from the preset
 ## Finding Nodes
 - For finding collision nodes with RHT, use the `Inspect` tab, and look directly at the collision
-- For any non-targetable node (Not entities), use the `Scan` tab or RHT
+- For any non-targetable node (Not entities or collisions), use the `Scan` tab of RHT
 ## Node information
 - Collision Nodes: Collision Nodes are made up of multiple `Actors`, each actor can be some shape, like a box, sphere / pill, and more complex shapes. Removal Editor removes all the actors of a collision node by default. This can sometimes lead to more being removed than anticipated. You can manually un-remove actors by editing the `actorDeletions` field of the node, in the generated `.xl` file
 - Occluder nodes: Currently RHT does not pick up on instanced mesh occluder nodes, so often it is impossible to remove the ones you want
