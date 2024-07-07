@@ -436,7 +436,7 @@ end
 
 function removal:new()
     registerForEvent("onInit", function()
-        self.runtimeData.rhtInstalled = Game.GetInspectionSystem() ~= nil
+        self.runtimeData.rhtInstalled = Game.GetWorldInspector() ~= nil
 
         config.tryCreateConfig("data/notes.json", self.notes)
         self.notes = config.loadFile("data/notes.json")
