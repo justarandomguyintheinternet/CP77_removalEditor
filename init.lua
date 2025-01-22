@@ -198,7 +198,13 @@ function removal:drawDirectTarget()
         drawProp("Mesh", target.meshPath)
         drawProp("Material", target.materialPath)
         drawProp("Entity Template", target.templatePath)
-        drawProp("Node Ref", target.nodeRef)
+
+        if target.nodeRef then
+            drawProp("Node Ref", target.nodeRef)
+        end
+        if target.debugName then
+            drawProp("Debug Name", target.debugName)
+        end
 
         local position = target.nodePosition or target.entityPosition
         if position then
@@ -261,7 +267,9 @@ function removal:addRemoval(nodeData)
     local orientation = nodeData.nodeOrientation or nodeData.entityOrientation
     removal.position = { x = position.x, y = position.y, z = position.z }
     removal.orientation = { i = orientation.i, j = orientation.j, k = orientation.k, r = orientation.r }
-    removal.debugString = nodeData.nodeRef or nodeData.meshPath or nodeData.templatePath or nodeData.materialPath or nodeData.effectPath or nodeData.recordID or ""
+    removal.nodeRef = nodeData.nodeRef or ""
+    removal.resource = nodeData.meshPath or nodeData.templatePath or nodeData.materialPath or nodeData.effectPath or nodeData.recordID or ""
+    removal.debugName = nodeData.debugName or ""
 
     table.insert(sector.nodeDeletions, 1, removal)
     config.saveFile("data/" .. self.currentFile, preset)
@@ -381,8 +389,14 @@ function removal:drawRemoval(sector, entry)
     if entry.position then
         drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", entry.position.x, entry.position.y, entry.position.z))
     end
-    if entry.debugString then
-        drawProp("Debug String", entry.debugString)
+    if entry.debugName ~= "" then
+        drawProp("Debug Name", entry.debugName)
+    end
+    if entry.resource ~= "" then
+        drawProp("Resource", entry.resource)
+    end
+    if entry.nodeRef ~= "" then
+        drawProp("NodeRef", entry.nodeRef)
     end
 
     ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
