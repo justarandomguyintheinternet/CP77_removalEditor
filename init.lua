@@ -194,11 +194,16 @@ function removal:drawDirectTarget()
         drawProp("Collision", target.collisionGroup)
         drawProp("Node Type", target.nodeType)
         drawProp("Node Index", target.instanceIndex .. " / " .. target.instanceCount)
-        drawProp("Sector Path", target.path)
         drawProp("World Sector", target.sectorPath)
         drawProp("Mesh", target.meshPath)
         drawProp("Material", target.materialPath)
         drawProp("Entity Template", target.templatePath)
+        drawProp("Node Ref", target.nodeRef)
+
+        local position = target.nodePosition or target.entityPosition
+        if position then
+            drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", position.x, position.y, position.z))
+        end
 
         ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
         ImGui.TextWrapped("Note:")
@@ -248,9 +253,16 @@ function removal:addRemoval(nodeData)
 
     local removal, success = getNodeRemoval(nodeData.nodeType, nodeData.instanceIndex)
     if not success then
-        print("[RemovalThing] Error: Node to be removed was streamed out, re-send it from RHT!")
+        print("[RemovalEditor] Error: Node to be removed was streamed out, re-send it from RHT!")
         return
     end
+
+    local position = nodeData.nodePosition or nodeData.entityPosition
+    local orientation = nodeData.nodeOrientation or nodeData.entityOrientation
+    removal.position = { x = position.x, y = position.y, z = position.z }
+    removal.orientation = { i = orientation.i, j = orientation.j, k = orientation.k, r = orientation.r }
+    removal.debugString = nodeData.nodeRef or nodeData.meshPath or nodeData.templatePath or nodeData.materialPath or nodeData.effectPath or nodeData.recordID or ""
+
     table.insert(sector.nodeDeletions, 1, removal)
     config.saveFile("data/" .. self.currentFile, preset)
 
@@ -275,8 +287,8 @@ function removal:drawEditUI()
     drawProp("Staging Mode", mode)
     self.directAdd = ImGui.Checkbox("Add nodes directly from RedHotTools window", self.directAdd)
 
-    if ImGui.Button("Add all scanned nodes") then
-        local nodes = GetMod("RedHotTools").GetScannerTargets()
+    if ImGui.Button("Add all scanned & filtered nodes") then
+        local nodes = GetMod("RedHotTools").GetWorldScannerFilteredResults()
 
         for _, node in pairs(nodes) do
             target = node
@@ -366,6 +378,12 @@ function removal:drawRemoval(sector, entry)
     drawProp("Type", entry.type)
     drawProp("Sector Path", sector.path)
     drawProp("Node Index", tostring(entry.index .. "/" .. sector.expectedNodes))
+    if entry.position then
+        drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", entry.position.x, entry.position.y, entry.position.z))
+    end
+    if entry.debugString then
+        drawProp("Debug String", entry.debugString)
+    end
 
     ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
     ImGui.TextWrapped("Note:")
@@ -476,7 +494,7 @@ function removal:new()
 end
 
 registerHotkey("addNode", "Add [Inspect] node", function()
-    local node = GetMod("RedHotTools").GetInspectorTarget()
+    local node = GetMod("RedHotTools").GetWorldInspectorTarget()
     if not node then return end
     target = node
     removal:addRemoval(target)
