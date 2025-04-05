@@ -24,4 +24,4 @@ Here you can create a new preset by entering a name in the `Name...` field and h
 - For any non-targetable node (Not entities or collisions), use the `Scan` tab of RHT
 ## Node information
 - Collision Nodes: Collision Nodes are made up of multiple `Actors`, each actor can be some shape, like a box, sphere / pill, and more complex shapes. Removal Editor removes all the actors of a collision node by default. This can sometimes lead to more being removed than anticipated. You can manually un-remove actors by editing the `actorDeletions` field of the node, in the generated `.xl` file
-- Occluder nodes: Currently RHT does not pick up on instanced mesh occluder nodes, so often it is impossible to remove the ones you want
+- Occluder nodes: Currently RHT does not pick up on instanced mesh occluder nodes, so often it is impossible to remove the ones you want, you can try and use [VS2077](https://github.com/notaspirit/VolumetricSelection2077) instead
