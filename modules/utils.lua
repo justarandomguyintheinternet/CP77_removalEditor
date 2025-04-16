@@ -125,7 +125,20 @@ function utils.getTotalRemovals(preset)
     return num
 end
 
---- Returns the sector table of a given list of sectors, based on its ressource path
+--- Returns the total amount of node mutations within a .xl file
+---@param preset table
+---@return number
+function utils.getTotalMutations(preset)
+    local num = 0
+
+    for _, sector in pairs(preset.streaming.sectors) do
+        num = num + #sector.nodeMutations
+    end
+
+    return num
+end
+
+--- Returns the sector table of a given list of sectors, based on its resource path
 ---@param sectors table
 ---@param path string
 ---@return table | nil
@@ -133,6 +146,19 @@ function utils.findSectorByPath(sectors, path)
     for _, sector in pairs(sectors) do
         if sector.path == path then return sector end
     end
+end
+
+function utils.tooltip(text)
+    if ImGui.IsItemHovered() then
+        utils.setCursorRelative(8, 8)
+
+        ImGui.SetTooltip(text)
+    end
+end
+
+function utils.setCursorRelative(x, y)
+    local xC, yC = ImGui.GetMousePos()
+    ImGui.SetNextWindowPos(xC + x * ImGui.GetFontSize() / 15, yC + y * ImGui.GetFontSize() / 15, ImGuiCond.Always)
 end
 
 return utils

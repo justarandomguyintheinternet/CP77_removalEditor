@@ -1,5 +1,7 @@
 local config = require("modules/config")
 local utils = require("modules/utils")
+local GameUI = require("modules/GameUI")
+local style = require("modules/style")
 
 local target = nil
 
@@ -19,76 +21,10 @@ local removal = {
     notes = {},
     currentFile = "",
     directAdd = true,
-    searchText = ""
+    searchText = "",
+    reload = false,
+    reloadTransform = {}
 }
-
-local styles = {}
-
--- Credits to psiberx for most of the styling choices and techniques
-local function initStyles()
-    styles.scale = ImGui.GetFontSize() / 13
-    styles.width = 400 * styles.scale
-    styles.paddingX = 8 * styles.scale
-    styles.paddingY = 8 * styles.scale
-    styles.buttonY = 21 * styles.scale
-end
-
--- Also "inspired" by psiberx's UI
-local function drawProp(name, value)
-    if not name or not value then return end
-
-    ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
-    ImGui.TextWrapped(name .. ": ")
-    ImGui.PopStyleColor()
-
-    ImGui.SameLine()
-
-    ImGui.TextWrapped(tostring(value))
-
-    if ImGui.IsItemClicked(ImGuiMouseButton.Middle) then
-        ImGui.SetClipboardText(value)
-    end
-end
-
-local function pushGreyedOut(state)
-    if not state then return end
-
-    ImGui.PushStyleColor(ImGuiCol.Button, 0xff777777)
-    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0xff777777)
-    ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0xff777777)
-end
-
-local function popGreyedOut(state)
-    if not state then return end
-
-    ImGui.PopStyleColor(3)
-end
-
-local function pushFrameStyle()
-    ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0)
-    ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 0, 0)
-    ImGui.PushStyleColor(ImGuiCol.FrameBg, 0)
-end
-
-local function popFrameStyle()
-    ImGui.PopStyleColor()
-    ImGui.PopStyleVar(2)
-end
-
-local function spacedSeparator()
-    ImGui.Spacing()
-    ImGui.Separator()
-    ImGui.Spacing()
-end
-
-local function hasSectorRemoval(sector, index)
-    if not sector or not index then return false end
-
-    for _, removal in pairs(sector.nodeDeletions) do
-        if removal.index == index then return true end
-    end
-    return false
-end
 
 function removal:getEditFlag()
     if self.uiData.switchToEdit then
@@ -103,6 +39,15 @@ function removal:drawPresetUI()
         if file.name:match("^.+(%..+)$") == ".xl" then
             if not self.presets[file.name] then
                 self.presets[file.name] = config.loadFile("data/" .. file.name)
+
+                for  _, sector in pairs(self.presets[file.name].streaming.sectors) do
+                    if not sector.nodeDeletions then
+                        sector.nodeDeletions = {}
+                    end
+                    if not sector.nodeMutations then
+                        sector.nodeMutations = {}
+                    end
+                end
             end
         end
     end
@@ -113,24 +58,25 @@ function removal:drawPresetUI()
 
     ImGui.SameLine()
 
-    pushGreyedOut(not validName)
+    style.pushGreyedOut(not validName)
 
     if ImGui.Button("Create") and validName then
         config.tryCreateConfig("data/" .. self.uiData.newPresetName .. ".xl", {streaming = {sectors = {}}})
         self.uiData.newPresetName = ""
     end
 
-    popGreyedOut(not validName)
-    spacedSeparator()
-    pushFrameStyle()
+    style.popGreyedOut(not validName)
+    style.spacedSeparator()
+    style.pushFrameStyle()
 
     local elements = math.max(5, math.min(15, utils.countTableSize(self.presets))) -- Guh
     ImGui.BeginChildFrame(1, 0, elements * ImGui.GetFrameHeightWithSpacing()) -- What
 
     for name, preset in pairs(self.presets) do
         if ImGui.TreeNodeEx(name:match("(.+)%..+$"), ImGuiTreeNodeFlags.SpanFullWidth) then
-            drawProp("Sectors", #preset.streaming.sectors)
-            drawProp("Removals", utils.getTotalRemovals(preset))
+            style.drawProp("Sectors", #preset.streaming.sectors)
+            style.drawProp("Removals", utils.getTotalRemovals(preset))
+            style.drawProp("Mutations", utils.getTotalMutations(preset))
 
             ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 5, 2)
 
@@ -146,6 +92,16 @@ function removal:drawPresetUI()
                     self.currentFile = ""
                 end
             end
+            ImGui.SameLine()
+            if ImGui.Button("Install & Reload") then
+                RedHotTools.HotInstall(string.format("bin\\x64\\plugins\\cyber_engine_tweaks\\mods\\removalEditor\\data\\%s", name))
+                self.reloadTransform.position = GetPlayer():GetWorldPosition()
+                self.reloadTransform.rotation = GetPlayer():GetWorldOrientation():ToEulerAngles()
+                self.reload = true
+
+                Game.GetSystemRequestsHandler():LoadLastCheckpoint(true)
+            end
+            utils.tooltip("Make a Quick-Save to speed up the reload process.")
             ImGui.PopStyleVar(1)
 
             ImGui.TreePop()
@@ -154,61 +110,34 @@ function removal:drawPresetUI()
 
     ImGui.EndChildFrame()
 
-    popFrameStyle()
-end
-
---- Get the removal table to be used in the .xl file for a specific node
----@param nodeType string
----@param index number
----@param object worldNode
----@return table, boolean
-local function getNodeRemoval(nodeType, index)
-    if nodeType ~= "worldCollisionNode" then
-        return {type = nodeType, index = index}, true
-    end
-
-    if not IsDefined(target.nodeDefinition) then
-        return {}, false
-    end
-
-    local actorDeletions = {}
-    for i = 0, target.nodeDefinition.numActors - 1 do
-        table.insert(actorDeletions, i)
-    end
-
-    return {
-        type = nodeType,
-        index = index,
-        expectedActors = target.nodeDefinition.numActors,
-        actorDeletions = actorDeletions
-    }, true
+    style.popFrameStyle()
 end
 
 function removal:drawDirectTarget()
-    pushGreyedOut(not target)
+    style.pushGreyedOut(not target)
     ImGui.Spacing()
 
     if not target then
         ImGui.Text("No node selected, send one here first from the RedHotTools window!")
     else
-        drawProp("Collision", target.collisionGroup)
-        drawProp("Node Type", target.nodeType)
-        drawProp("Node Index", target.instanceIndex .. " / " .. target.instanceCount)
-        drawProp("World Sector", target.sectorPath)
-        drawProp("Mesh", target.meshPath)
-        drawProp("Material", target.materialPath)
-        drawProp("Entity Template", target.templatePath)
+        style.drawProp("Collision", target.collisionGroup)
+        style.drawProp("Node Type", target.nodeType)
+        style.drawProp("Node Index", target.instanceIndex .. " / " .. target.instanceCount)
+        style.drawProp("World Sector", target.sectorPath)
+        style.drawProp("Mesh", target.meshPath)
+        style.drawProp("Material", target.materialPath)
+        style.drawProp("Entity Template", target.templatePath)
 
         if target.nodeRef then
-            drawProp("Node Ref", target.nodeRef)
+            style.drawProp("Node Ref", target.nodeRef)
         end
         if target.debugName then
-            drawProp("Debug Name", target.debugName)
+            style.drawProp("Debug Name", target.debugName)
         end
 
         local position = target.nodePosition or target.entityPosition
         if position then
-            drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", position.x, position.y, position.z))
+            style.drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", position.x, position.y, position.z))
         end
 
         ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
@@ -230,28 +159,282 @@ function removal:drawDirectTarget()
 
     ImGui.Spacing()
 
-    if ImGui.Button("Add Staged Node", styles.width, styles.buttonY) then
+    if ImGui.Button("Add Staged Node", style.width, style.buttonY) then
         if target then
             self:addRemoval(target)
         end
     end
 
-    popGreyedOut(not target)
+    style.popGreyedOut(not target)
+end
+
+function removal:drawEditUI()
+    if not self.presets[self.currentFile] then
+        ImGui.Text("No preset loaded.")
+        return
+    end
+
+    local mode = "Direct Add [Add directly to preset when clicking button in RHT]"
+    if not self.directAdd then
+        mode = "Add with confirmation [Node to be removed gets staged here first]"
+    end
+    style.drawProp("Staging Mode", mode)
+    self.directAdd = ImGui.Checkbox("Add nodes directly from RedHotTools window", self.directAdd)
+
+    if ImGui.Button("Add all scanned & filtered nodes") then
+        local nodes = GetMod("RedHotTools").GetWorldScannerFilteredResults()
+
+        for _, node in pairs(nodes) do
+            target = node
+            self:addRemoval(node)
+        end
+    end
+
+    if not self.directAdd then
+        style.spacedSeparator()
+        self:drawDirectTarget()
+    end
+    style.spacedSeparator()
+
+    ImGui.PushItemWidth(400)
+    self.searchText = ImGui.InputTextWithHint("##searchForNode", "Search for node (Type, Sector, Index, Note)", self.searchText, 100)
+    if self.searchText ~= "" then
+        ImGui.SameLine()
+        if ImGui.Button("X") then
+            self.searchText = ""
+        end
+    end
+
+    style.spacedSeparator()
+
+    self:drawRemovals(self.presets[self.currentFile])
+end
+
+function removal:drawRemovals(preset)
+    style.pushFrameStyle()
+
+    local elements = math.max(7, math.min(15, utils.getTotalRemovals(preset)))
+    ImGui.BeginChildFrame(1, 0, elements * ImGui.GetFrameHeightWithSpacing())
+
+    for sectorKey, sector in pairs(preset.streaming.sectors) do
+        for entryKey, entry in pairs(sector.nodeDeletions) do
+            if self:isRemovalSearched(sector, entry) then
+                if ImGui.TreeNodeEx("##" .. tostring(entry.index) .. tostring(sector.path), ImGuiTreeNodeFlags.SpanFullWidth, self:getRemovalName(entry, sector)) then
+                    ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 5, 2)
+
+                    if not self:drawRemoval(sector, entry) then
+                        self:deleteRemoval(preset, sector, entry, entryKey, sectorKey)
+                    end
+
+                    ImGui.PopStyleVar(1)
+                    ImGui.TreePop()
+                end
+            end
+        end
+    end
+
+    ImGui.EndChildFrame()
+    style.popFrameStyle()
+end
+
+function removal:drawRemoval(sector, entry)
+    style.drawProp("Type", entry.type)
+    style.drawProp("Sector Path", sector.path)
+    style.drawProp("Node Index", tostring(entry.index .. "/" .. sector.expectedNodes))
+    if entry.position then
+        style.drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", entry.position.x, entry.position.y, entry.position.z))
+    end
+    if entry.debugName ~= "" then
+        style.drawProp("Debug Name", entry.debugName)
+    end
+    if entry.resource ~= "" then
+        style.drawProp("Resource", entry.resource)
+    end
+    if entry.nodeRef ~= "" then
+        style.drawProp("NodeRef", entry.nodeRef)
+    end
+
+    ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
+    ImGui.TextWrapped("Note:")
+    ImGui.PopStyleColor()
+    ImGui.SameLine()
+
+    style.popFrameStyle()
+
+    local sectorName = sector.path:match("(.+)%..+$"):match("[^\\]*.$")
+    local note = self.notes[tostring(sectorName .. "_" .. entry.index)] or ""
+    local text, changed = ImGui.InputTextWithHint("##noteRemoval", "Note...", note, 100)
+    if changed and #text > 0 then
+        self.notes[tostring(sectorName .. "_" .. entry.index)] = text
+        config.saveFile("data/notes.json", self.notes)
+    elseif changed then
+        self.notes[tostring(sectorName .. "_" .. entry.index)] = nil
+        config.saveFile("data/notes.json", self.notes)
+    end
+
+    style.pushFrameStyle()
+
+    if ImGui.Button("Remove") then
+        return false
+    end
+
+    return true
+end
+
+function removal:drawUI()
+    ImGui.SetNextWindowSize(style.width + style.paddingX * 2, 0)
+    ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, style.paddingX, style.paddingY)
+
+    if ImGui.Begin("Removal Editor", ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoScrollbar) then
+        if not self.runtimeData.rhtInstalled then
+            ImGui.Text("RedHotTools is not installed!")
+            ImGui.End()
+            return
+        end
+
+        ImGui.BeginTabBar("Tabbar", ImGuiTabItemFlags.NoTooltip)
+
+        if ImGui.BeginTabItem(" Presets ") then
+            ImGui.Spacing()
+            self:drawPresetUI()
+            ImGui.EndTabItem()
+        end
+
+        if ImGui.BeginTabItem(" Edit ", self:getEditFlag()) then
+            ImGui.Spacing()
+            self:drawEditUI()
+            ImGui.EndTabItem()
+        end
+    end
+    ImGui.End()
+end
+
+--- Get the removal table to be used in the .xl file for a specific node
+---@param nodeType string
+---@param index number
+---@param object worldNode
+---@return table, boolean
+local function getNodeRemoval(nodeType, index)
+    local result = {}
+    local proxyID = target.nodeInstance:GetProxyNodeID()
+
+    if proxyID and proxyID.hash ~= 0 then
+        local proxy = removal:createProxyMutation(proxyID.hash)
+
+        if proxy then
+            local diff = 1
+
+            if target.nodeDefinition:IsA("worldInstancedMeshNode") then
+                diff = target.nodeDefinition.worldTransformsBuffer.numElements
+            end
+
+            proxy.nbNodesUnderProxyDiff = proxy.nbNodesUnderProxyDiff - diff
+            result.proxyHash = proxy.nodeRefHash
+            result.proxyDiff = diff
+        end
+    end
+
+    result.type = nodeType
+    result.index = index
+
+    if nodeType ~= "worldCollisionNode" then
+        return result, true
+    end
+
+    if not IsDefined(target.nodeDefinition) then
+        return result, false
+    end
+
+    local actorDeletions = {}
+    for i = 0, target.nodeDefinition.numActors - 1 do
+        table.insert(actorDeletions, i)
+    end
+
+    result.expectedActors = target.nodeDefinition.numActors
+    result.actorDeletions = actorDeletions
+    return result, true
+end
+
+local function isWorldNode(node)
+    return node and node.sectorPath and node.instanceIndex
+end
+
+local function sendNode(node)
+    target = node
+
+    if removal.directAdd then
+        removal:addRemoval(target)
+    end
+end
+
+local function hasSectorRemoval(sector, index)
+    if not sector or not index then return false end
+
+    for _, removal in pairs(sector.nodeDeletions) do
+        if removal.index == index then return true end
+    end
+    return false
+end
+
+function removal:addSector(preset, sectorPath, instanceCount)
+    local sector = utils.findSectorByPath(preset.streaming.sectors, sectorPath)
+    if not sector then
+        sector = {
+            path = sectorPath,
+            nodeDeletions = {},
+            nodeMutations = {},
+            expectedNodes = instanceCount,
+        }
+        table.insert(preset.streaming.sectors, sector)
+    end
+
+    return sector
+end
+
+function removal:createProxyMutation(hash)
+    local proxy = nil
+    local preset = self.presets[self.currentFile]
+    if not preset then return end
+
+    local hashString = tostring(hash):gsub("ULL", "")
+    for _, sector in pairs(preset.streaming.sectors) do
+        for _, node in pairs(sector.nodeMutations) do
+            if node.nodeRefHash == hashString then
+                return node
+            end
+        end
+    end
+
+    if not proxy then
+        local proxyNode = Game.GetWorldInspector():FindStreamedNode(hash)
+
+        if not proxyNode or not proxyNode.nodeDefinition then
+            print("[RemovalEditor] Error: Proxy node of this removal not found or streamed in!")
+            return
+        end
+
+        local sectorData = Game.GetWorldInspector():ResolveSectorDataFromNodeID(hash)
+        local sectorPath = RedHotTools.GetResourcePath(sectorData.sectorHash)
+
+        proxy = {
+            type = proxyNode.nodeDefinition:GetClassName().value,
+            index = sectorData.instanceIndex,
+            nodeRefHash = tostring(hash):gsub("ULL", ""),
+            nbNodesUnderProxyDiff = 0
+        }
+
+        local sector = removal:addSector(preset, sectorPath, sectorData.instanceCount)
+        table.insert(sector.nodeMutations, proxy)
+    end
+
+    return proxy
 end
 
 function removal:addRemoval(nodeData)
     local preset = self.presets[self.currentFile]
     if not preset then return end
-    local sector = utils.findSectorByPath(preset.streaming.sectors, nodeData.sectorPath)
 
-    if not sector then
-        sector = {
-            path = nodeData.sectorPath,
-            nodeDeletions = {},
-            expectedNodes = nodeData.instanceCount
-        }
-        table.insert(preset.streaming.sectors, sector)
-    end
+    local sector = self:addSector(preset, nodeData.sectorPath, nodeData.instanceCount)
 
     if hasSectorRemoval(sector, nodeData.instanceIndex) then
         return
@@ -282,48 +465,6 @@ function removal:addRemoval(nodeData)
     end
 end
 
-function removal:drawEditUI()
-    if not self.presets[self.currentFile] then
-        ImGui.Text("No preset loaded.")
-        return
-    end
-
-    local mode = "Direct Add [Add directly to preset when clicking button in RHT]"
-    if not self.directAdd then
-        mode = "Add with confirmation [Node to be removed gets staged here first]"
-    end
-    drawProp("Staging Mode", mode)
-    self.directAdd = ImGui.Checkbox("Add nodes directly from RedHotTools window", self.directAdd)
-
-    if ImGui.Button("Add all scanned & filtered nodes") then
-        local nodes = GetMod("RedHotTools").GetWorldScannerFilteredResults()
-
-        for _, node in pairs(nodes) do
-            target = node
-            self:addRemoval(node)
-        end
-    end
-
-    if not self.directAdd then
-        spacedSeparator()
-        self:drawDirectTarget()
-    end
-    spacedSeparator()
-
-    ImGui.PushItemWidth(400)
-    self.searchText = ImGui.InputTextWithHint("##searchForNode", "Search for node (Type, Sector, Index, Note)", self.searchText, 100)
-    if self.searchText ~= "" then
-        ImGui.SameLine()
-        if ImGui.Button("X") then
-            self.searchText = ""
-        end
-    end
-
-    spacedSeparator()
-
-    self:drawRemovals(self.presets[self.currentFile])
-end
-
 function removal:getRemovalName(entry, sector)
     local sectorName = sector.path:match("(.+)%..+$"):match("[^\\]*.$")
     local name = self.notes[tostring(sectorName .. "_" .. entry.index)]
@@ -350,120 +491,35 @@ function removal:isRemovalSearched(sector, entry)
     return false
 end
 
-function removal:drawRemovals(preset)
-    pushFrameStyle()
-
-    local elements = math.max(7, math.min(15, utils.getTotalRemovals(preset)))
-    ImGui.BeginChildFrame(1, 0, elements * ImGui.GetFrameHeightWithSpacing())
+function removal:updateProxyMutation(preset, entry)
+    if not entry.proxyHash then return end
 
     for sectorKey, sector in pairs(preset.streaming.sectors) do
-        for entryKey, entry in pairs(sector.nodeDeletions) do
-            if self:isRemovalSearched(sector, entry) then
-                if ImGui.TreeNodeEx("##" .. tostring(entry.index) .. tostring(sector.path), ImGuiTreeNodeFlags.SpanFullWidth, self:getRemovalName(entry, sector)) then
-                    ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 5, 2)
+        for proxyIndex, node in pairs(sector.nodeMutations) do
+            if node.nodeRefHash == entry.proxyHash then
+                node.nbNodesUnderProxyDiff = node.nbNodesUnderProxyDiff + entry.proxyDiff
 
-                    if not self:drawRemoval(sector, entry) then
-                        table.remove(sector.nodeDeletions, entryKey)
-                        if #sector.nodeDeletions == 0 then
-                            table.remove(preset.streaming.sectors, sectorKey)
-                        end
+                if node.nbNodesUnderProxyDiff >= 0 then
+                    table.remove(sector.nodeMutations, proxyIndex)
+                end
 
-                        config.saveFile("data/" .. self.currentFile, preset)
-                    end
-
-                    ImGui.PopStyleVar(1)
-                    ImGui.TreePop()
+                if #sector.nodeMutations == 0 and #sector.nodeDeletions == 0 then
+                    table.remove(preset.streaming.sectors, sectorKey)
                 end
             end
         end
     end
-
-    ImGui.EndChildFrame()
-    popFrameStyle()
 end
 
-function removal:drawRemoval(sector, entry)
-    drawProp("Type", entry.type)
-    drawProp("Sector Path", sector.path)
-    drawProp("Node Index", tostring(entry.index .. "/" .. sector.expectedNodes))
-    if entry.position then
-        drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", entry.position.x, entry.position.y, entry.position.z))
-    end
-    if entry.debugName ~= "" then
-        drawProp("Debug Name", entry.debugName)
-    end
-    if entry.resource ~= "" then
-        drawProp("Resource", entry.resource)
-    end
-    if entry.nodeRef ~= "" then
-        drawProp("NodeRef", entry.nodeRef)
+function removal:deleteRemoval(preset, sector, entry, entryKey, sectorKey)
+    table.remove(sector.nodeDeletions, entryKey)
+    if #sector.nodeDeletions == 0 and #sector.nodeMutations then
+        table.remove(preset.streaming.sectors, sectorKey)
     end
 
-    ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
-    ImGui.TextWrapped("Note:")
-    ImGui.PopStyleColor()
-    ImGui.SameLine()
+    self:updateProxyMutation(preset, entry)
 
-    popFrameStyle()
-
-    local sectorName = sector.path:match("(.+)%..+$"):match("[^\\]*.$")
-    local note = self.notes[tostring(sectorName .. "_" .. entry.index)] or ""
-    local text, changed = ImGui.InputTextWithHint("##noteRemoval", "Note...", note, 100)
-    if changed and #text > 0 then
-        self.notes[tostring(sectorName .. "_" .. entry.index)] = text
-        config.saveFile("data/notes.json", self.notes)
-    elseif changed then
-        self.notes[tostring(sectorName .. "_" .. entry.index)] = nil
-        config.saveFile("data/notes.json", self.notes)
-    end
-
-    pushFrameStyle()
-
-    if ImGui.Button("Remove", 65, 20) then
-        return false
-    end
-
-    return true
-end
-
-function removal:drawUI()
-    ImGui.SetNextWindowSize(styles.width + styles.paddingX * 2, 0)
-    ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, styles.paddingX, styles.paddingY)
-
-    if ImGui.Begin("Removal Editor", ImGuiWindowFlags.NoResize + ImGuiWindowFlags.NoScrollbar) then
-        if not self.runtimeData.rhtInstalled then
-            ImGui.Text("RedHotTools is not installed!")
-            ImGui.End()
-            return
-        end
-
-        ImGui.BeginTabBar("Tabbar", ImGuiTabItemFlags.NoTooltip)
-
-        if ImGui.BeginTabItem(" Presets ") then
-            ImGui.Spacing()
-            self:drawPresetUI()
-            ImGui.EndTabItem()
-        end
-
-        if ImGui.BeginTabItem(" Edit ", self:getEditFlag()) then
-            ImGui.Spacing()
-            self:drawEditUI()
-            ImGui.EndTabItem()
-        end
-    end
-    ImGui.End()
-end
-
-local function isWorldNode(node)
-    return node and node.sectorPath and node.instanceIndex
-end
-
-local function sendNode(node)
-    target = node
-
-    if removal.directAdd then
-        removal:addRemoval(target)
-    end
+    config.saveFile("data/" .. self.currentFile, preset)
 end
 
 function removal:new()
@@ -472,6 +528,13 @@ function removal:new()
 
         config.tryCreateConfig("data/notes.json", self.notes)
         self.notes = config.loadFile("data/notes.json")
+
+        GameUI.OnSessionStart(function()
+            if self.reload then
+                self.reload = false
+                Game.GetTeleportationFacility():Teleport(GetPlayer(), self.reloadTransform.position, self.reloadTransform.rotation)
+            end
+        end)
 
         GetMod("RedHotTools").RegisterExtension({
             getTargetActions = function(node)
@@ -487,9 +550,7 @@ function removal:new()
     end)
 
     registerForEvent("onDraw", function()
-        if #styles == 0 then
-            initStyles()
-        end
+        style.initStyles()
 
         if removal.runtimeData.cetOpen then
             self:drawUI()
