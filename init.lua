@@ -5,6 +5,27 @@ local style = require("modules/style")
 
 local target = nil
 
+---@class removalEntry
+---@field type string
+---@field index number
+---@field actorDeletions table?
+---@field expectedActors number?
+---@field nbNodesUnderProxyDiff number?
+---@field proxyHash string?
+---@field proxyDiff number?
+---@field nodeRefHash string?
+---@field nodeRef string
+---@field resource string
+---@field position table
+---@field orientation table
+---@field debugName string
+
+---@class proxyMutation
+---@field type string
+---@field index number
+---@field nodeRefHash string
+---@field nbNodesUnderProxyDiff number
+
 local removal = {
     runtimeData = {
         cetOpen = false,
@@ -67,10 +88,9 @@ function removal:drawPresetUI()
 
     style.popGreyedOut(not validName)
     style.spacedSeparator()
-    style.pushFrameStyle()
 
-    local elements = math.max(5, math.min(15, utils.countTableSize(self.presets))) -- Guh
-    ImGui.BeginChildFrame(1, 0, elements * ImGui.GetFrameHeightWithSpacing()) -- What
+    local elements = math.max(5, math.min(20, utils.countTableSize(self.presets))) -- Guh
+    ImGui.BeginChild("##presets", -1, elements * ImGui.GetFrameHeightWithSpacing()) -- What
 
     for name, preset in pairs(self.presets) do
         if ImGui.TreeNodeEx(name:match("(.+)%..+$"), ImGuiTreeNodeFlags.SpanFullWidth) then
@@ -108,9 +128,31 @@ function removal:drawPresetUI()
         end
     end
 
-    ImGui.EndChildFrame()
+    ImGui.EndChild()
+end
 
-    style.popFrameStyle()
+function removal:drawActors(entry)
+    if ImGui.TreeNodeEx("Collision Actors" , ImGuiTreeNodeFlags.SpanFullWidth) then
+        if ImGui.BeginChild("##test", -1, 120 * style.scale, false) then
+
+            for index = 0, entry.expectedActors - 1 do
+                local value = utils.has_value(entry.actorDeletions, index)
+                local newValue, changed = ImGui.Checkbox(tostring(index), value)
+                if changed then
+                    if newValue then
+                        table.insert(entry.actorDeletions, index)
+                    else
+                        utils.removeItem(entry.actorDeletions, index)
+                    end
+
+                    config.saveFile("data/" .. self.currentFile, self.presets[self.currentFile])
+                end
+            end
+            ImGui.EndChild()
+        end
+
+        ImGui.TreePop()
+    end
 end
 
 function removal:drawDirectTarget()
@@ -138,6 +180,10 @@ function removal:drawDirectTarget()
         local position = target.nodePosition or target.entityPosition
         if position then
             style.drawProp("Position", string.format("X: %.2f Y: %.2f Z: %.2f", position.x, position.y, position.z))
+        end
+
+        if target.physicsActorOffset and target.physicsActorIndex then
+            style.drawProp("Physics Actor", target.physicsActorOffset + target.physicsActorIndex .. "/" .. target.nodeDefinition.numActors)
         end
 
         ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
@@ -211,10 +257,8 @@ function removal:drawEditUI()
 end
 
 function removal:drawRemovals(preset)
-    style.pushFrameStyle()
-
-    local elements = math.max(7, math.min(15, utils.getTotalRemovals(preset)))
-    ImGui.BeginChildFrame(1, 0, elements * ImGui.GetFrameHeightWithSpacing())
+    local elements = math.max(7, math.min(20, utils.getTotalRemovals(preset)))
+    ImGui.BeginChild("##removals", -1, elements * ImGui.GetFrameHeightWithSpacing())
 
     for sectorKey, sector in pairs(preset.streaming.sectors) do
         for entryKey, entry in pairs(sector.nodeDeletions) do
@@ -233,8 +277,7 @@ function removal:drawRemovals(preset)
         end
     end
 
-    ImGui.EndChildFrame()
-    style.popFrameStyle()
+    ImGui.EndChild()
 end
 
 function removal:drawRemoval(sector, entry)
@@ -254,12 +297,14 @@ function removal:drawRemoval(sector, entry)
         style.drawProp("NodeRef", entry.nodeRef)
     end
 
+    if entry.actorDeletions then
+        self:drawActors(entry)
+    end
+
     ImGui.PushStyleColor(ImGuiCol.Text, 0xff9f9f9f)
     ImGui.TextWrapped("Note:")
     ImGui.PopStyleColor()
     ImGui.SameLine()
-
-    style.popFrameStyle()
 
     local sectorName = sector.path:match("(.+)%..+$"):match("[^\\]*.$")
     local note = self.notes[tostring(sectorName .. "_" .. entry.index)] or ""
@@ -271,8 +316,6 @@ function removal:drawRemoval(sector, entry)
         self.notes[tostring(sectorName .. "_" .. entry.index)] = nil
         config.saveFile("data/notes.json", self.notes)
     end
-
-    style.pushFrameStyle()
 
     if ImGui.Button("Remove") then
         return false
@@ -313,7 +356,7 @@ end
 ---@param nodeType string
 ---@param index number
 ---@param object worldNode
----@return table, boolean
+---@return removalEntry, boolean
 local function getNodeRemoval(nodeType, index)
     local result = {}
     local proxyID = target.nodeInstance:GetProxyNodeID()
@@ -346,8 +389,13 @@ local function getNodeRemoval(nodeType, index)
     end
 
     local actorDeletions = {}
-    for i = 0, target.nodeDefinition.numActors - 1 do
-        table.insert(actorDeletions, i)
+
+    if not target.collision then
+        for i = 0, target.nodeDefinition.numActors - 1 do
+            table.insert(actorDeletions, i)
+        end
+    else
+        actorDeletions = { target.physicsActorOffset + target.physicsActorIndex }
     end
 
     result.expectedActors = target.nodeDefinition.numActors
@@ -367,12 +415,17 @@ local function sendNode(node)
     end
 end
 
+---Excludes collision nodes, as they can be expanded
+---@param sector table
+---@param index number
+---@return boolean, removalEntry?
 local function hasSectorRemoval(sector, index)
     if not sector or not index then return false end
 
     for _, removal in pairs(sector.nodeDeletions) do
-        if removal.index == index then return true end
+        if removal.index == index then return true, removal end
     end
+
     return false
 end
 
@@ -391,6 +444,8 @@ function removal:addSector(preset, sectorPath, instanceCount)
     return sector
 end
 
+---@param hash number
+---@return proxyMutation?
 function removal:createProxyMutation(hash)
     local proxy = nil
     local preset = self.presets[self.currentFile]
@@ -436,7 +491,18 @@ function removal:addRemoval(nodeData)
 
     local sector = self:addSector(preset, nodeData.sectorPath, nodeData.instanceCount)
 
-    if hasSectorRemoval(sector, nodeData.instanceIndex) then
+    local hasRemoval, data = hasSectorRemoval(sector, nodeData.instanceIndex)
+
+    if hasRemoval then
+        if data and data.actorDeletions then
+            local actor = target.physicsActorOffset + target.physicsActorIndex
+
+            if not utils.has_value(data.actorDeletions, actor) then
+                table.insert(data.actorDeletions, actor)
+            end
+
+            config.saveFile("data/" .. self.currentFile, self.presets[self.currentFile])
+        end
         return
     end
 

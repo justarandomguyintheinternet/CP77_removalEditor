@@ -46,17 +46,6 @@ function style.popGreyedOut(state)
     ImGui.PopStyleColor(3)
 end
 
-function style.pushFrameStyle()
-    ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0)
-    ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, 0, 0)
-    ImGui.PushStyleColor(ImGuiCol.FrameBg, 0)
-end
-
-function style.popFrameStyle()
-    ImGui.PopStyleColor()
-    ImGui.PopStyleVar(2)
-end
-
 function style.spacedSeparator()
     ImGui.Spacing()
     ImGui.Separator()
