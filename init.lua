@@ -133,23 +133,23 @@ end
 
 function removal:drawActors(entry)
     if ImGui.TreeNodeEx("Collision Actors" , ImGuiTreeNodeFlags.SpanFullWidth) then
-        if ImGui.BeginChild("##test", -1, 120 * style.scale, false) then
+        ImGui.BeginChild("##actors", -1, math.min(8, #entry.actorDeletions) * ImGui.GetFrameHeightWithSpacing())
 
-            for index = 0, entry.expectedActors - 1 do
-                local value = utils.has_value(entry.actorDeletions, index)
-                local newValue, changed = ImGui.Checkbox(tostring(index), value)
-                if changed then
-                    if newValue then
-                        table.insert(entry.actorDeletions, index)
-                    else
-                        utils.removeItem(entry.actorDeletions, index)
-                    end
-
-                    config.saveFile("data/" .. self.currentFile, self.presets[self.currentFile])
+        for index = 0, entry.expectedActors - 1 do
+            local value = utils.has_value(entry.actorDeletions, index)
+            local newValue, changed = ImGui.Checkbox(tostring(index), value)
+            if changed then
+                if newValue then
+                    table.insert(entry.actorDeletions, index)
+                else
+                    utils.removeItem(entry.actorDeletions, index)
                 end
+
+                config.saveFile("data/" .. self.currentFile, self.presets[self.currentFile])
             end
-            ImGui.EndChild()
         end
+
+        ImGui.EndChild()
 
         ImGui.TreePop()
     end
@@ -257,7 +257,7 @@ function removal:drawEditUI()
 end
 
 function removal:drawRemovals(preset)
-    local elements = math.max(7, math.min(20, utils.getTotalRemovals(preset)))
+    local elements = math.max(8, math.min(20, utils.getTotalRemovals(preset)))
     ImGui.BeginChild("##removals", -1, elements * ImGui.GetFrameHeightWithSpacing())
 
     for sectorKey, sector in pairs(preset.streaming.sectors) do
