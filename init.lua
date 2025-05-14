@@ -359,10 +359,10 @@ end
 ---@return removalEntry, boolean
 local function getNodeRemoval(nodeType, index)
     local result = {}
-    local proxyID = target.nodeInstance:GetProxyNodeID()
+    local proxyID = target.nodeProxyID
 
-    if proxyID and proxyID.hash ~= 0 then
-        local proxy = removal:createProxyMutation(proxyID.hash)
+    if proxyID and proxyID ~= 0 then
+        local proxy = removal:createProxyMutation(proxyID)
 
         if proxy then
             local diff = 1
@@ -461,23 +461,21 @@ function removal:createProxyMutation(hash)
     end
 
     if not proxy then
-        local proxyNode = Game.GetWorldInspector():FindStreamedNode(hash)
+        local sectorData = Game.GetWorldInspector():ResolveSectorDataFromNodeID(hash)
 
-        if not proxyNode or not proxyNode.nodeDefinition then
-            print("[RemovalEditor] Error: Proxy node of this removal not found or streamed in!")
+        if not sectorData or sectorData.sectorHash == 0 then
+            print("[RemovalEditor] Error: Proxy node of this removal not found!")
             return
         end
 
-        local sectorData = Game.GetWorldInspector():ResolveSectorDataFromNodeID(hash)
-        local sectorPath = RedHotTools.GetResourcePath(sectorData.sectorHash)
-
         proxy = {
-            type = proxyNode.nodeDefinition:GetClassName().value,
+            type = sectorData.nodeType.value,
             index = sectorData.instanceIndex,
             nodeRefHash = tostring(hash):gsub("ULL", ""),
             nbNodesUnderProxyDiff = 0
         }
 
+        local sectorPath = RedHotTools.GetResourcePath(sectorData.sectorHash)
         local sector = removal:addSector(preset, sectorPath, sectorData.instanceCount)
         table.insert(sector.nodeMutations, proxy)
     end
