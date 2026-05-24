@@ -429,6 +429,31 @@ local function hasSectorRemoval(sector, index)
     return false
 end
 
+
+local function canToggleNodeState(target)
+    return target and IsDefined(target.nodeInstance) and target.isVisibleNode
+end
+
+local inspectionSystem 
+    
+local function toggleNodeState(target)
+    inspectionSystem = inspectionSystem or Game.GetWorldInspector()
+    if not target or not canToggleNodeState(target) then
+        target = lastTarget
+        lastTarget = nil
+    end
+
+    if target then
+        if IsDefined(target.parentInstance) then
+            inspectionSystem:ToggleNodeVisibility(target.parentInstance)
+            lastTarget = target
+        elseif IsDefined(target.nodeInstance) then
+            inspectionSystem:ToggleNodeVisibility(target.nodeInstance)
+            lastTarget = target
+        end
+    end
+end
+
 function removal:addSector(preset, sectorPath, instanceCount)
     local sector = utils.findSectorByPath(preset.streaming.sectors, sectorPath)
     if not sector then
@@ -509,6 +534,8 @@ function removal:addRemoval(nodeData)
         print("[RemovalEditor] Error: Node to be removed was streamed out, re-send it from RHT!")
         return
     end
+    
+    toggleNodeState(nodeData)
 
     local position = nodeData.nodePosition or nodeData.entityPosition
     local orientation = nodeData.nodeOrientation or nodeData.entityOrientation
