@@ -70,7 +70,7 @@ local defs = {
     aboutMod = {
         label = "About",
         category = "about",
-        searchTerms = "version author credits thanks contributors"
+        searchTerms = "version author credits thanks maintainer"
     },
 
     dependencies = {
@@ -243,7 +243,7 @@ end
 local function drawAboutPage()
     search:beginDimKey("aboutMod", defs)
 
-    local labels = { "Version", "Author", "Contributors" }
+    local labels = { "Version", "Author", "Maintainer" }
     local labelWidth = 0
     for _, label in ipairs(labels) do
         labelWidth = math.max(labelWidth, (ImGui.CalcTextSize(label)))
@@ -262,8 +262,8 @@ local function drawAboutPage()
 
     row("Version", about.version)
     row("Author", about.author)
-    if #about.contributors > 0 then
-        row("Contributors", table.concat(about.contributors, ", "))
+    if about.maintainer then
+        row("Maintainer", about.maintainer)
     end
 
     style.panelSectionHeader("Thanks")

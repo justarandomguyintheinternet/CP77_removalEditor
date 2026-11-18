@@ -28,9 +28,9 @@
 
 local about = {
     name = "Removal Editor",
-    version = "1.4.0-beta.1",
+    version = "1.4.0",
     author = "NexusGuy999 (keanuWheeze)",
-    contributors = { "Akiway" },
+    maintainer = "Akiway",
     thanks = "psiberx, for RedHotTools, which finds the nodes, and ArchiveXL, which removes them.",
     states = {
         ok = "ok",
