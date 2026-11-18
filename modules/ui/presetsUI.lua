@@ -105,7 +105,7 @@ end
 -- The columns of the list, on the right of the name of each preset
 local COLUMNS = {
     { key = "commented", header = "Ignored", tooltip = "Nodes commented out by ArchiveXL Sector Updater (ArchiveXL ignores them).\nOrange when some were not found or do not match, grey when they all moved." },
-    { key = "version", header = "Game Version", tooltip = "Game version the preset was made for, orange when it is not the running one." },
+    { key = "version", header = "Game\nVersion", tooltip = "Game version the preset was made for, orange when it is not the running one." },
     { key = "format", header = "Format", tooltip = "Format of the .xl file." }
 }
 
@@ -176,9 +176,10 @@ end
 ---@param text string
 ---@param color number?
 ---@param tooltip string?
-local function drawCell(x, text, color, tooltip)
+---@param y number? Screen position, the current line if nil
+local function drawCell(x, text, color, tooltip, y)
     ImGui.SameLine()
-    local _, y = ImGui.GetCursorScreenPos()
+    y = y or select(2, ImGui.GetCursorScreenPos())
     ImGui.SetCursorScreenPos(x, y)
     style.styledText(text, color)
 
@@ -194,14 +195,27 @@ end
 ---@param left number Screen position of the names
 ---@param xs table<string, number>
 local function drawListHeader(left, xs)
-    local _, y = ImGui.GetCursorScreenPos()
-    ImGui.SetCursorScreenPos(left, y)
+    -- Headers can span several lines: each one is centered vertically on the tallest
+    local function countLines(text)
+        return select(2, text:gsub("\n", "")) + 1
+    end
+    local lines = 1
+    for _, column in ipairs(COLUMNS) do
+        lines = math.max(lines, countLines(column.header))
+    end
+    local lineHeight = ImGui.GetTextLineHeight()
+
+    local startX, y = ImGui.GetCursorScreenPos()
+    ImGui.SetCursorScreenPos(left, y + (lines - 1) * lineHeight / 2)
     style.mutedText("Name")
 
     for _, column in ipairs(COLUMNS) do
-        drawCell(xs[column.key], column.header, style.mutedColor, column.tooltip)
+        drawCell(xs[column.key], column.header, style.mutedColor, column.tooltip,
+            y + (lines - countLines(column.header)) * lineHeight / 2)
     end
 
+    -- The line under the header goes below its tallest cell
+    ImGui.SetCursorScreenPos(startX, y + lines * lineHeight + ImGui.GetStyle().ItemSpacing.y)
     ImGui.Separator()
 end
 
@@ -229,26 +243,43 @@ local function drawPreset(name, preset, cells, xs, gap)
 
     if not open then return end
 
+    -- The counters share one line, each behind its icon
+    local counters = {
+        { icon = IconGlyphs.SelectionMultipleMarker, name = "Sectors", value = #preset.streaming.sectors },
+        { icon = IconGlyphs.DeleteVariant, name = "Removals", value = utils.getTotalRemovals(preset) },
+        { icon = IconGlyphs.CursorMove, name = "Mutations", value = utils.getTotalMutations(preset) }
+    }
+    for index, counter in ipairs(counters) do
+        if index > 1 then
+            ImGui.SameLine()
+            ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ImGui.GetStyle().ItemSpacing.x * 2)
+        end
+        -- Plain text: the SameLine of the next counter does not hold after the TextWrapped of style.drawProp
+        style.mutedText(counter.icon .. " " .. counter.name)
+        ImGui.SameLine()
+        ImGui.Text(tostring(counter.value))
+        if ImGui.IsItemClicked(ImGuiMouseButton.Middle) then
+            ImGui.SetClipboardText(tostring(counter.value))
+            ImGui.ShowToast(ImGui.Toast.new(ImGui.ToastType.Success, 2500, "Copied " .. counter.name .. " to the clipboard"))
+        end
+    end
+
     local commented = presets.getCommented(name)
-    local valueX = style.getPropertiesX({ "Sectors", "Removals", "Mutations", "Commented Out" })
-    style.drawProp("Sectors", #preset.streaming.sectors, valueX)
-    style.drawProp("Removals", utils.getTotalRemovals(preset), valueX)
-    style.drawProp("Mutations", utils.getTotalMutations(preset), valueX)
     if #commented > 0 then
-        style.drawProp("Commented Out", string.format("%d (%s)", #commented, commentedNodes.summary(commented)), valueX)
+        style.drawProp("Commented Out", string.format("%d (%s)", #commented, commentedNodes.summary(commented)))
         style.wrappedTooltip(presetsUI.getCommentedTooltip(commented))
     end
 
     presetsUI.drawVersionWarning(name, preset)
 
-    if ImGui.Button("Edit") then
+    if ImGui.Button(style.actionLabel(IconGlyphs.PencilOutline, "Edit")) then
         presets.open(name)
         presetsUI.baseUI.selectTab("edit")
     end
     style.tooltip("Opens the preset in the Edit tab")
     ImGui.SameLine()
 
-    if ImGui.Button("Delete") then
+    if style.dangerButton(style.actionLabel(IconGlyphs.DeleteOutline, "Delete")) then
         requestDelete(name)
     end
     ImGui.SameLine()
@@ -257,20 +288,18 @@ local function drawPreset(name, preset, cells, xs, gap)
     -- A preset made for another game version is only installed on a second click
     local outdated = presets.getOutdatedVersion(preset) ~= nil
     local confirming = outdated and presetsUI.pendingInstall == name
-    style.pushGreyedOut(not inGame)
-    if ImGui.Button(confirming and "Install anyway" or "Install & Reload") and inGame then
+    local installLabel = style.actionLabel(IconGlyphs.DownloadCircleOutline, confirming and "Install anyway" or "Install & Reload")
+    if style.warnButton(installLabel, {
+        disabled = not inGame,
+        tooltip = confirming and "This preset was not made for this game version: ArchiveXL may remove the wrong objects."
+            or "Installs the preset and reloads the last save. Make a Quick-Save first, to keep your progress and speed up the reload."
+    }) then
         if outdated and not confirming then
             presetsUI.pendingInstall = name
         else
             presetsUI.pendingInstall = nil
             presets.install(name)
         end
-    end
-    style.popGreyedOut(not inGame)
-    if confirming then
-        style.tooltip("This preset was not made for this game version: ArchiveXL may remove the wrong objects.")
-    else
-        style.tooltip("Installs the preset and reloads the last save. Make a Quick-Save first, to keep your progress and speed up the reload.")
     end
 
     ImGui.TreePop()

@@ -797,15 +797,16 @@ function style.dragSetting(id, axis, length, state, bound)
     end
 end
 
---- Red button
----@param text string
----@param ... any Size, given to ImGui.Button
+---Draw a red "danger" button.
+---@param text string Button label / ID.
+---@param ... any Optional size args forwarded to `ImGui.Button`.
 ---@return boolean clicked
 function style.dangerButton(text, ...)
-    pushFilledButton(style.errorColor)
+    ImGui.PushStyleColor(ImGuiCol.Button, 0.65, 0.15, 0.15, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, 0.80, 0.20, 0.20, 1.0)
+    ImGui.PushStyleColor(ImGuiCol.ButtonActive, 0.55, 0.10, 0.10, 1.0)
     local clicked = ImGui.Button(text, ...)
-    popFilledButton()
-
+    ImGui.PopStyleColor(3)
     return clicked
 end
 
@@ -821,27 +822,43 @@ function style.successButton(text, ...)
     return clicked
 end
 
---- Orange button
----@param text string
----@param opts {disabled: boolean?, tooltip: string?, disabledTooltip: string?}?
+---@class warnButtonOpts
+---@field disabled boolean? Draw as disabled and suppress click handling.
+---@field tooltip string? Tooltip shown when enabled.
+---@field disabledTooltip string? Tooltip shown when disabled (falls back to `tooltip` when omitted).
+---@field tooltipOffsetX number? Optional cursor-relative X offset before drawing tooltip.
+---@field tooltipOffsetY number? Optional cursor-relative Y offset before drawing tooltip.
+
+---Draw an orange warning button.
+---Supports optional disable state and tooltip handling through a trailing options table.
+---Usage: `style.warnButton(text, [w], [h], { disabled = bool, tooltip = "...", disabledTooltip = "..." })`.
+---@param text string Button label / ID.
+---@param opts warnButtonOpts? Optional flags. See `warnButtonOpts` for details.
 ---@return boolean clicked
 function style.warnButton(text, opts)
     opts = opts or {}
-    local disabled = opts.disabled == true
-    local tooltipText = disabled and (opts.disabledTooltip or opts.tooltip) or opts.tooltip
+    local disabled = opts.disabled == true or false
+    local tooltipText = disabled and opts.disabledTooltip or opts.tooltip
+    local tooltipOffsetX = opts.tooltipOffsetX
+    local tooltipOffsetY = opts.tooltipOffsetY
 
-    if disabled then
-        ImGui.PushStyleColor(ImGuiCol.Button, style.greyedColor)
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, style.greyedColor)
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, style.greyedColor)
-    else
-        pushFilledButton(style.warnColor)
-    end
+    local rgb = style.warnColor % 0x1000000
+    local defaultColor = disabled and style.greyedColor or 0xCC000000 + rgb
+    local hoveredColor = disabled and style.greyedColor or style.warnColor
+    local activeColor = disabled and style.greyedColor or 0x99000000 + rgb
+    local clicked = false
 
-    local clicked = ImGui.Button(text)
-    popFilledButton()
+
+    ImGui.PushStyleColor(ImGuiCol.Button, defaultColor)
+    ImGui.PushStyleColor(ImGuiCol.ButtonHovered, hoveredColor)
+    ImGui.PushStyleColor(ImGuiCol.ButtonActive, activeColor)
+    clicked = ImGui.Button(text)
+    ImGui.PopStyleColor(3)
 
     if tooltipText then
+        if tooltipOffsetX and tooltipOffsetY and ImGui.IsItemHovered() then
+            style.setCursorRelative(tooltipOffsetX, tooltipOffsetY)
+        end
         style.tooltip(tooltipText)
     end
 
